@@ -204,6 +204,9 @@
       .attr("d", function (d) {
         return makeLine(x)(d.values);
       })
+      .attr("id", (d) => d.id.substring(0, 3).toUpperCase())
+      .attr("data-id", (d) => d.id.substring(0, 3).toUpperCase())
+      .attr("visibility", "visible")
       .style("stroke", function (d) {
         return color(d.id);
       })
@@ -235,9 +238,32 @@
           )
           .style("left", elem.pageX + 28 + "px")
           .style("top", elem.pageY - 28 + "px");
+
+        const id = elem.srcElement.attributes["data-id"].value;
+        const path = country.select("#" + id);
+        if (path.attr("visibility") == "hidden") {
+          return;
+        }
+        country.selectAll(".line").style("stroke", (d) => {
+          let target_id = d.id.substring(0, 3).toUpperCase();
+          if (d.id.substring(0, 3).toUpperCase() == id) {
+            return color(d.id);
+          } else {
+            return "#eaeaea";
+          }
+        });
       })
       .on("mouseout", (elem) => {
         tooltipDiv.transition().duration(500).style("opacity", 0);
+
+        const id = elem.srcElement.attributes["data-id"].value;
+        const path = country.select("#" + id);
+        if (path.attr("visibility") == "hidden") {
+          return;
+        }
+        country.selectAll(".line").style("stroke", (d) => {
+          return color(d.id);
+        });
       });
   });
 </script>
