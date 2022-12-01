@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<style>
+  div.tooltip {
+    position: absolute;
+    text-align: center;
+    width: max-content;
+    padding: 0.5em 0.8em;
+    font: 15px sans-serif;
+    background: white;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
+    line-height: 1.5em;
+    border: 2px solid;
+  }
+
+  .line {
+    fill: none;
+    stroke: steelblue;
+    stroke-width: 1.5px;
+  }
+
+  .title {
+    margin-left: 50px;
+    font-family: sans-serif;
+  }
+</style>
+
+<body>
+  <h2 class="title">Covid Deaths Timeline Chart</h2>
+  <svg id="timelineChart" width="1100" height="550"></svg>
+</body>
+<script src="https://d3js.org/d3.v6.min.js"></script>
+<script>
+  // select the SVG
+  const svg = d3.select("#timelineChart");
+
+  // set the margin for surrounding space
+  const margin = { top: 20, right: 80, bottom: 30, left: 50 };
+
+  // set width/height for scale
+  const width = svg.attr("width") - margin.left - margin.right;
+  const height = svg.attr("height") - margin.top - margin.bottom;
+
+  // created tooltip div and appended to body
+  const tooltipDiv = d3
+    .select("body")
+    .append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+  // main g element which contain all other elements
+  const g = svg
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  // ordinal scale for line colors
+  const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+  // time scale for x axis 
+  const x = d3.scaleTime().range([0, width - margin.right]);
+
+  // linear scale for y axis count values
+  const y = d3.scaleLinear().range([height, 0]);
+
+  // make line by new scale when zoomed the chart
+  const makeLine = (newXScale) =>
+    d3
+      .line()
+      .curve(d3.curveBasis)
+      .x(function (d) {
+        return newXScale(d.date);
+      })
+      .y(function (d) {
+        return y(d.value);
+      });
+
+  // read the csv data
+  d3.csv("Total-Deaths.csv").then((data) => {
+    // fetch all the date for creating the x axis 
+    const dates = Object.keys(data[0])
+      .slice(4, Object.keys(data[0]).length)
+      .slice(0, Object.keys(data[0]).length - 11);
+
+    // set the total deaths for each country to sort the data and get first 50 countries
+    data.forEach((d) => {
+      d.total = 0;
+      dates.forEach((date) => {
+        if (!isNaN(d[date])) {
+          d.total += +d[date] ?? 0;
+        }
+      });
+    });
+
+    // sort by total deaths
+    data.sort((a, b) => {
+      return b.total - a.total;
+    });
+
+    // get first 50 data
+    data = data.slice(0, 50);
+
+    // arrange countries data by date
+    const countries = data.reduce((arr, cur) => {
+      const obj = { id: cur["Country/Region"], values: [] };
+      dates.forEach((date) => {
+        obj.values.push({
+          date: new Date(date),
+          value: !isNaN(cur[date]) ? +cur[date] : 0, // if no value at certain date then set the 0
+        });
+      });
+      arr = [...arr, obj];
+      return arr;
+    }, []);
+
+    // set color scale domain
+    color.domain(
+      countries.map(function (c) {
+        return c.id;
+      })
+    );
+
+    // set x scale domain
+    x.domain(
+      d3.extent(countries[0].values, function (d) {
+        return d.date;
+      })
+    );
+
+    // set y axis domain 
+    y.domain([
+      0,
+      d3.max(countries, function (c) {
+        return d3.max(c.values, function (d) {
+          return d.value;
+        });
+      }),
+    ]);
+
+    // add svg for each country 
+    const country = g
+      .selectAll(".country")
+      .data(countries)
+      .enter()
+      .append("svg")
+      .attr("class", "country")
+      .attr("width", width - margin.right);
+
+    // append x axis on main g
+    const x_axis = g
+      .append("g")
+      .attr("transform", "translate(0," + height + ")")
+      .call(d3.axisBottom(x));
+
+    // append y axis on main g
+    g.append("g")
+      .call(d3.axisLeft(y))
+      .append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", "0.71em")
+      .attr("fill", "#000")
+      .text("Covid Deaths (Jan - May 2020)");
+
+    // re-render the x-scale on zoom
+    const xAxis = (g, xScale) =>
+      g.attr("transform", `translate(0,${height})`).call(
+        d3
+          .axisBottom(xScale)
+          .ticks(width / 80)
+          .tickSizeOuter(0)
+      );
+
+    function zoomed(event) {
+      // update the range of x-scale
+      const xz = event.transform.rescaleX(x);
+
+      // update the lines using updated x axis
+      country.selectAll(".line").attr("d", function (d) {
+        return makeLine(xz)(d.values);
+      });
+
+      // render updated x-scale on main g 
+      x_axis.call(xAxis, xz);
+    }
+
+    // d3 zoom config
+    const zoom = d3
+      .zoom()
+      .scaleExtent([1, 6])
+      .extent([
+        [margin.left, 0],
+        [width - margin.right, height],
+      ])
+      .on("zoom", zoomed);
+
+    // embed d3 zoom to main svg
+    svg.call(zoom).transition().duration(100).call(zoom.scaleTo, 1, [0, 0]);
+
+    country
+      .append("path")
+      .attr("class", "line")
+      .attr("d", function (d) {
+        return makeLine(x)(d.values);
+      })
+      .style("stroke", function (d) {
+        return color(d.id);
+      })
+      .style("stroke-width", 4)
+      .on("mouseover", (elem, elemData) => {
+        // get date value on mouse over on line
+        const xDate = x.invert(elem.layerX);
+
+        // find data point on mouse position 
+        const value = elemData.values.find((d) => {
+          const date = new Date(xDate);
+          date.setHours(0, 0, 0, 0);
+          return new Date(d.date).toDateString() === date.toDateString();
+        });
+
+        // convert the js full date to mm/dd/yyyy format
+        const yyyy = xDate.getFullYear();
+        let mm = xDate.getMonth() + 1; // Months start at 0
+        let dd = xDate.getDate();
+
+        if (dd < 10) dd = "0" + dd;
+        if (mm < 10) mm = "0" + mm;
+
+        const formattedToday = dd + "/" + mm + "/" + yyyy;
+        tooltipDiv.transition().duration(200).style("opacity", 0.9);
+        tooltipDiv
+          .html(
+            `Country:  ${elemData.id}` + "<br/>" + `Date:  ${formattedToday}` + "<br/>" + `Death: ${value?.value ?? 0}`
+          )
+          .style("left", elem.pageX + 28 + "px")
+          .style("top", elem.pageY - 28 + "px");
+      })
+      .on("mouseout", (elem) => {
+        tooltipDiv.transition().duration(500).style("opacity", 0);
+      });
+  });
+</script>
