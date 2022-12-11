@@ -232,7 +232,7 @@
         if (dd < 10) dd = "0" + dd;
         if (mm < 10) mm = "0" + mm;
 
-        const formattedToday = dd + "/" + mm + "/" + yyyy;
+        const formattedToday = mm + "/" + dd + "/" + yyyy;
         tooltipDiv.transition().duration(200).style("opacity", 0.9);
         tooltipDiv
           .html(
